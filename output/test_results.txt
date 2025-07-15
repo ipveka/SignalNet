@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.5, pytest-7.4.0, pluggy-1.0.0 -- /Users/ignasipascual/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/ignasipascual/GitHub/SignalNet
+configfile: pytest.ini
+plugins: Faker-24.4.0, anyio-3.7.1
+collecting ... collected 5 items
+
+tests/test_data.py::test_signal_dataset_windowing PASSED                 [ 20%]
+tests/test_data.py::test_signal_dataloader_split PASSED                  [ 40%]
+tests/test_evaluation.py::test_evaluation PASSED                         [ 60%]
+tests/test_model.py::test_signal_transformer_forward PASSED              [ 80%]
+tests/test_training.py::test_training PASSED                             [100%]
+
+======================== 5 passed, 2 warnings in 3.66s =========================
