@@ -1,5 +1,6 @@
 """
-Example usage of SignalNet: generate new data, use trained model (if available), predict using the predict() utility, evaluate, and visualize all predictions.
+Example usage of SignalNet: generate data, demonstrate frequency-aware feature selection, 
+train model, predict using the predict() utility, evaluate, and visualize all predictions.
 Also visualizes and prints all key objects and data.
 """
 import torch
@@ -10,63 +11,249 @@ from signalnet.data.loader import SignalDataLoader
 from signalnet.evaluation.metrics import mean_squared_error, mean_absolute_error
 from signalnet.data.generate_data import generate_signal_data
 from signalnet.predict import predict
-from signalnet.visualization.plot import plot_series_df, plot_predictions_df
+from signalnet.visualization.plot import plot_series_df, plot_combined_data
+from signalnet.training.train import train
 import os
 
-# Step 1: Generate new synthetic data for evaluation
-print("[EXAMPLE] Generating new synthetic data for evaluation...")
-new_data_path = 'input/example_signal_data.csv'
-generate_signal_data(n_series=3, length=150, output_file=new_data_path)
+# ============================================================================
+# CONFIGURATION PARAMETERS
+# ============================================================================
+CONFIG = {
+    # Data generation
+    'n_series': 3,
+    'length': 168,
+    'frequency': 'h', 
+    
+    # Model training
+    'train_model': False, 
+    'epochs': 5,
+    'batch_size': 32,
+    'learning_rate': 1e-4,
+    'context_length': 24,
+    'prediction_length': 6, 
+    
+    # File paths
+    'data_path': 'input/example_signal_data.csv',
+    'model_path': 'output/signalnet_model.pth',
+    'output_dir': 'output'
+}
 
-# Step 2: Load and visualize the generated data
-print("[EXAMPLE] Loading and visualizing the generated data...")
-df = pd.read_csv(new_data_path)
-print("[EXAMPLE] DataFrame head:")
+# ============================================================================
+# SETUP AND ENVIRONMENT PREPARATION
+# ============================================================================
+print("=" * 60)
+print("SIGNALNET EXAMPLE EXECUTION")
+print("=" * 60)
+
+# Ensure output directory exists
+os.makedirs(CONFIG['output_dir'], exist_ok=True)
+print("[SETUP] Output directory ready")
+
+# ============================================================================
+# STEP 1: DATA GENERATION
+# ============================================================================
+print("\n[DATA] Generating new synthetic data for evaluation...")
+print(f"[DATA] Frequency: {CONFIG['frequency']}, Length: {CONFIG['length']} periods")
+
+generate_signal_data(
+    n_series=CONFIG['n_series'], 
+    length=CONFIG['length'], 
+    output_file=CONFIG['data_path'], 
+    frequency=CONFIG['frequency']
+)
+print(f"[DATA] Data generated and saved to {CONFIG['data_path']}")
+
+# ============================================================================
+# STEP 2: DATA LOADING AND ANALYSIS
+# ============================================================================
+print("\n[DATA] Loading and analyzing the generated data...")
+
+df = pd.read_csv(CONFIG['data_path'])
+
+# Print data overview
+print("[DATA] DataFrame head:")
 print(df.head())
-print(f"[EXAMPLE] DataFrame shape: {df.shape}")
-print(f"[EXAMPLE] Unique series_id: {df['series_id'].unique()}")
-# Plot the raw generated data for each series using the utility
-plot_series_df(df, title='Generated Signal Data (Raw)')
+print(f"[DATA] DataFrame shape: {df.shape}")
+print(f"[DATA] Unique series_id: {df['series_id'].unique()}")
+print(f"[DATA] Time range: {df['timestamp'].min()} to {df['timestamp'].max()}")
 
-# Step 3: Prepare and print the SignalDataLoader
-context_length = 24
-prediction_length = 6
-loader = SignalDataLoader(new_data_path, context_length, prediction_length)
-print("[EXAMPLE] SignalDataLoader object:")
+# Visualize the raw data
+plot_series_df(df, title=f'Input {CONFIG["frequency"]} Data', 
+               save_path=f'{CONFIG["output_dir"]}/example_input.png')
+print(f"[DATA] Visualization saved to {CONFIG['output_dir']}/example_input.png")
+
+# ============================================================================
+# STEP 3: DATA LOADER PREPARATION
+# ============================================================================
+print("\n[LOADER] Preparing SignalDataLoader...")
+
+loader = SignalDataLoader(CONFIG['data_path'], CONFIG['context_length'], CONFIG['prediction_length'])
+print("[LOADER] SignalDataLoader object:")
 print(loader)
 
-# Step 4: Prepare and print the SignalDataset
-print("[EXAMPLE] SignalDataset object:")
+# ============================================================================
+# STEP 4: DATASET AND FEATURE ANALYSIS
+# ============================================================================
+print("\n[FEATURES] Analyzing SignalDataset with frequency-aware feature selection...")
+
 dataset = loader.get_dataset()
+
+# Print dataset information
+print("[FEATURES] SignalDataset object:")
 print(dataset)
-print(f"[EXAMPLE] Dataset length: {len(dataset)}")
-print("[EXAMPLE] First item in dataset (context, prediction, context_time_feat, pred_time_feat):")
+print(f"[FEATURES] Dataset length: {len(dataset)}")
+print(f"[FEATURES] Detected frequency: {dataset._detect_frequency(dataset.timestamps)}")
+print(f"[FEATURES] Features used: {dataset.features_used}")
+print(f"[FEATURES] Number of features: {len(dataset.features_used)}")
+
+# Show first item structure
+print("[FEATURES] First item in dataset (context, prediction, context_time_feat, pred_time_feat):")
 first_item = dataset[0]
 print(f"  context shape: {first_item[0].shape}")
 print(f"  prediction shape: {first_item[1].shape}")
 print(f"  context_time_feat shape: {first_item[2].shape}")
 print(f"  pred_time_feat shape: {first_item[3].shape}")
 
-# Step 5: Prepare and print the DataLoader
-print("[EXAMPLE] DataLoader object:")
-dataloader = DataLoader(dataset, batch_size=16)
-print(dataloader)
+# Feature analysis
+print("\n[FEATURES] Feature analysis:")
+print("=" * 40)
+for i, feature_name in enumerate(dataset.features_used):
+    feature_values = dataset.time_features[:, i]
+    unique_values = len(np.unique(feature_values))
+    print(f"  {feature_name}:")
+    print(f"    - Unique values: {unique_values}")
+    print(f"    - Range: [{feature_values.min():.3f}, {feature_values.max():.3f}]")
 
-# Step 6: Use the simple prediction utility to make predictions and get all info
-print("[EXAMPLE] Using predict() utility to make predictions (returns DataFrame)...")
-model_path = 'output/signalnet_model.pth'
-pred_df = predict(dataloader, model_path=model_path, return_all_info=False)
+# ============================================================================
+# STEP 5: TRAIN/TEST SPLIT
+# ============================================================================
+print("\n[SPLIT] Creating time series aware train/test split...")
 
-# Step 7: Save predictions DataFrame to CSV
-print("[EXAMPLE] Saving predictions DataFrame to example_output.csv...")
-pred_df.to_csv('example_output.csv', index=False)
-print("[EXAMPLE] Saved predictions to example_output.csv.")
+train_dataset, test_dataset = loader.train_test_split(test_size=0.2)
 
-# Step 8: Compute metrics directly
-mse = mean_squared_error(pred_df['ground_truth'], pred_df['prediction'])
-mae = mean_absolute_error(pred_df['ground_truth'], pred_df['prediction'])
-print(f"[EXAMPLE] MSE: {mse:.4f}, MAE: {mae:.4f}")
+print(f"[SPLIT] Training set size: {len(train_dataset)}")
+print(f"[SPLIT] Test set size: {len(test_dataset)}")
 
-# Step 9: Visualize predictions vs. ground truth using the same utility
-print("[EXAMPLE] Visualizing predictions vs. ground truth for each series...")
-plot_predictions_df(pred_df, title='SignalNet: Predictions vs. Ground Truth for Each Series') 
+# Show sample tags in the data
+print("\n[SPLIT] Sample tags in data:")
+train_data = train_dataset.data
+test_data = test_dataset.data
+print(f"  Train data sample column: {train_data['sample'].unique()}")
+print(f"  Test data sample column: {test_data['sample'].unique()}")
+print(f"  Train data shape: {train_data.shape}")
+print(f"  Test data shape: {test_data.shape}")
+
+# Get train/test split time for plotting
+train_test_split_time = test_data['timestamp'].min()
+print(f"  Train/test split time: {train_test_split_time}")
+
+# ============================================================================
+# STEP 6: MODEL TRAINING
+# ============================================================================
+if CONFIG['train_model']:
+    print(f"\n[TRAIN] Training model for {CONFIG['epochs']} epochs...")
+    print("=" * 50)
+    
+    train(
+        data_path=CONFIG['data_path'],
+        context_length=CONFIG['context_length'],
+        prediction_length=CONFIG['prediction_length'],
+        epochs=CONFIG['epochs'],
+        batch_size=CONFIG['batch_size'],
+        lr=CONFIG['learning_rate'],
+        save_model=True
+    )
+    print(f"[TRAIN] Training completed. Model saved to {CONFIG['model_path']}")
+else:
+    print(f"\n[TRAIN] Skipping training. Using existing model: {CONFIG['model_path']}")
+
+# ============================================================================
+# STEP 7: PREDICTION PREPARATION
+# ============================================================================
+print("\n[PREDICT] Preparing test DataLoader...")
+
+test_dataloader = DataLoader(test_dataset, batch_size=16)
+print("[PREDICT] Test DataLoader object:")
+print(test_dataloader)
+
+# ============================================================================
+# STEP 8: MAKING PREDICTIONS
+# ============================================================================
+print("[PREDICT] Using predict() utility to make predictions on test set...")
+
+test_pred_df = predict(test_dataloader, model_path=CONFIG['model_path'], return_all_info=False)
+
+# Show test set predictions
+print("\n[PREDICT] Test set predictions head:")
+print(test_pred_df.head(10))
+print(f"\n[PREDICT] Test set predictions shape: {test_pred_df.shape}")
+
+# Add sample tag to test predictions
+test_pred_df['sample'] = 'test'
+print(f"\n[PREDICT] Test predictions with sample tag:")
+print(test_pred_df[['series_id', 'timestamp', 'ground_truth', 'prediction', 'sample']].head(5))
+
+# ============================================================================
+# STEP 9: EVALUATION METRICS
+# ============================================================================
+print("\n[EVAL] Computing evaluation metrics...")
+
+test_mse = mean_squared_error(test_pred_df['ground_truth'], test_pred_df['prediction'])
+test_mae = mean_absolute_error(test_pred_df['ground_truth'], test_pred_df['prediction'])
+
+print(f"[EVAL] Test Set MSE: {test_mse:.4f}")
+print(f"[EVAL] Test Set MAE: {test_mae:.4f}")
+
+# ============================================================================
+# STEP 10: DATA COMBINATION AND ANALYSIS
+# ============================================================================
+print("\n[SAVE] Combining and analyzing datasets...")
+
+# Create combined dataset with train/test tags
+print("[SAVE] Creating combined dataset with sample tags...")
+combined_data = pd.concat([train_data, test_data], ignore_index=True)
+
+print(f"[SAVE] Combined data shape: {combined_data.shape}")
+print(f"[SAVE] Sample distribution: {combined_data['sample'].value_counts().to_dict()}")
+print(f"[SAVE] Time range: {combined_data['timestamp'].min()} to {combined_data['timestamp'].max()}")
+print(f"[SAVE] Series distribution: {combined_data['series_id'].value_counts().to_dict()}")
+
+# Print head of combined data
+print(f"\n[SAVE] Combined data head:")
+print(combined_data.head(10))
+
+# Plot the combined data showing train vs test samples
+print(f"\n[SAVE] Plotting combined data with train/test samples...")
+plot_combined_data(
+    combined_data, 
+    title=f'Combined Train/Test Data - {CONFIG["frequency"]} Frequency',
+    save_path=f'{CONFIG["output_dir"]}/example_combined.png'
+)
+print(f"[SAVE] Combined data visualization saved to {CONFIG['output_dir']}/example_combined.png")
+
+# ============================================================================
+# STEP 11: SAVING ALL DATASETS
+# ============================================================================
+print("\n[SAVE] Saving all datasets to output directory...")
+
+# Save input data
+print("[SAVE] Saving input data...")
+df.to_csv(f'{CONFIG["output_dir"]}/example_input.csv', index=False)
+print("[SAVE] Saved input data to output/example_input.csv")
+
+# Save forecast data
+print("[SAVE] Saving forecast data...")
+test_pred_df.to_csv(f'{CONFIG["output_dir"]}/example_forecast.csv', index=False)
+print("[SAVE] Saved forecast data to output/example_forecast.csv")
+
+# Save combined data
+print("[SAVE] Saving combined data...")
+combined_data.to_csv(f'{CONFIG["output_dir"]}/example_combined.csv', index=False)
+print("[SAVE] Saved combined data to output/example_combined.csv")
+
+# ============================================================================
+# COMPLETION
+# ============================================================================
+print("\n" + "=" * 60)
+print("EXAMPLE EXECUTION COMPLETED SUCCESSFULLY")
+print("=" * 60)

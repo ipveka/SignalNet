@@ -1,3 +1,0 @@
-"""
-Visualization tools for SignalNet.
-"""
