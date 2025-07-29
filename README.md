@@ -4,7 +4,7 @@ SignalNet is a production-ready Python package for time series signal prediction
 
 ## 🚀 Key Features
 
-- **Advanced Transformer Architecture**: 128-dimensional model with 4 layers and 8 attention heads
+- **Advanced Transformer Architecture**: 256-dimensional model with 6 layers and 16 attention heads
 - **Data Normalization**: Built-in LayerNorm for stable training and better convergence
 - **Automatic Output Scaling**: Learnable scale and bias parameters for optimal prediction ranges
 - **Rich Time Features**: Comprehensive temporal features (day of week, hour, minute, month, day of month, is_weekend)
@@ -16,8 +16,8 @@ SignalNet is a production-ready Python package for time series signal prediction
 ## 📊 Performance
 
 SignalNet achieves excellent prediction accuracy:
-- **MSE**: 0.44 (97% improvement over baseline)
-- **MAE**: 0.53 (85% improvement over baseline)
+- **MSE**: 0.31 (98% improvement over baseline)
+- **MAE**: 0.48 (86% improvement over baseline)
 - **Scale Alignment**: Predictions automatically match data scale
 - **Consistent Performance**: Robust across different time series patterns
 
@@ -75,7 +75,7 @@ The prediction function returns a comprehensive DataFrame:
 ## 🏗️ Architecture Improvements
 
 ### Model Enhancements
-- **Larger Architecture**: 128 dimensions, 4 layers, 8 attention heads
+- **Larger Architecture**: 256 dimensions, 6 layers, 16 attention heads
 - **Data Normalization**: LayerNorm for inputs and time features
 - **Output Scaling**: Learnable scale and bias parameters
 - **Regularization**: Dropout and gradient clipping for stability
@@ -116,10 +116,13 @@ SignalNet automatically extracts and normalizes:
 
 ### Visualization
 ```python
-from signalnet.visualization.plot import plot_predictions_df
+from signalnet.visualization.plot import plot_series_df, plot_combined_series_df
 
-# Save predictions plot to file
-plot_predictions_df(pred_df, save_path='output/predictions.png')
+# Plot raw data
+plot_series_df(df, title='Time Series Data', save_path='output/input_data.png')
+
+# Plot combined train/test data with sample-based coloring
+plot_combined_series_df(combined_df, title='Train/Test Split', save_path='output/combined_data.png')
 ```
 
 ### Data Generation

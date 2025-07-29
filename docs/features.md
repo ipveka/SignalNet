@@ -1,10 +1,10 @@
 # Time Features and Feature Engineering
 
-SignalNet automatically detects data frequency and extracts only relevant temporal features, ensuring optimal model performance by excluding meaningless features for different data granularities.
+SignalNet automatically detects data frequency and extracts only relevant temporal features, ensuring optimal model performance by excluding meaningless features for different data granularities. The system also includes automatic data normalization and denormalization for improved training stability.
 
 ## 🕒 Frequency-Aware Feature Generation
 
-SignalNet intelligently selects features based on detected data frequency:
+SignalNet intelligently selects features based on detected data frequency and includes automatic data normalization:
 
 ```python
 def _detect_frequency(self, timestamps: pd.Series) -> str:
@@ -20,6 +20,11 @@ def _detect_frequency(self, timestamps: pd.Series) -> str:
     elif total_seconds <= 2592000: return 'month'
     elif total_seconds <= 7776000: return 'quarter'
     else: return 'year'
+
+# Automatic Z-score normalization
+self.value_mean = np.mean(self.values)
+self.value_std = np.std(self.values)
+self.values_normalized = (self.values - self.value_mean) / self.value_std
 ```
 
 ## 📊 Frequency-Specific Feature Selection
@@ -97,7 +102,41 @@ if frequency == 'month':
         'is_month_end'                   # ✅ Relevant
         # ❌ All hourly/minute features excluded
     ]
+
+## 🔄 Data Normalization and Denormalization
+
+### Automatic Z-Score Normalization
+SignalNet automatically normalizes input data using Z-score normalization for improved training stability:
+
+```python
+# During data loading
+self.value_mean = np.mean(self.values)
+self.value_std = np.std(self.values)
+if self.value_std == 0:
+    self.value_std = 1.0  # Avoid division by zero
+
+# Normalize values for training
+self.values_normalized = (self.values - self.value_mean) / self.value_std
 ```
+
+### Automatic Denormalization
+Predictions are automatically denormalized to the original data scale:
+
+```python
+# During prediction
+if hasattr(dataset, 'denormalize'):
+    output_denorm = dataset.denormalize(output.cpu().numpy())
+    target_denorm = dataset.denormalize(target.numpy())
+else:
+    output_denorm = output.cpu().numpy()
+    target_denorm = target.numpy()
+```
+
+### Benefits
+- **Stable Training**: Normalized data prevents gradient explosion
+- **Better Convergence**: Consistent scale across different datasets
+- **Accurate Predictions**: Outputs in original data scale
+- **Automatic Handling**: No manual normalization required
 
 ## 🎯 Why This Matters
 

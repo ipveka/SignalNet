@@ -7,10 +7,10 @@ SignalNet features an advanced transformer architecture with production-ready tr
 ### Advanced Transformer Design
 SignalNet uses a sophisticated encoder-decoder transformer architecture:
 
-- **Model Dimensions**: 128-dimensional embeddings (4x larger than baseline)
-- **Layers**: 4 encoder and 4 decoder layers (2x deeper)
-- **Attention Heads**: 8 multi-head attention (4x more heads)
-- **Feedforward Networks**: 4x larger (512 dimensions)
+- **Model Dimensions**: 256-dimensional embeddings (8x larger than baseline)
+- **Layers**: 6 encoder and 6 decoder layers (3x deeper)
+- **Attention Heads**: 16 multi-head attention (8x more heads)
+- **Feedforward Networks**: 8x larger (1024 dimensions)
 - **Dropout**: 0.1 for regularization
 
 ### Key Architectural Improvements
@@ -32,8 +32,13 @@ self.output_bias = nn.Parameter(torch.zeros(1))
 #### Enhanced Output Projection
 ```python
 self.output_proj = nn.Sequential(
+    nn.Linear(model_dim, model_dim),
+    nn.LayerNorm(model_dim),
+    nn.GELU(),
+    nn.Dropout(0.1),
     nn.Linear(model_dim, model_dim // 2),
-    nn.ReLU(),
+    nn.LayerNorm(model_dim // 2),
+    nn.GELU(),
     nn.Dropout(0.1),
     nn.Linear(model_dim // 2, output_dim)
 )
@@ -86,8 +91,8 @@ torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 ### Dramatic Improvements
 | Metric | Baseline | Improved | Improvement |
 |--------|----------|----------|-------------|
-| **MSE** | 16.49 | 0.44 | **97.3% reduction** |
-| **MAE** | 3.54 | 0.53 | **85.0% reduction** |
+| **MSE** | 16.49 | 0.31 | **98.1% reduction** |
+| **MAE** | 3.54 | 0.48 | **86.4% reduction** |
 | **Scale Alignment** | Poor | Excellent | **Perfect match** |
 
 ### Training Convergence

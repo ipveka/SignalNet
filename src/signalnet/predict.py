@@ -36,7 +36,7 @@ def predict(
     time_feat_dim = dataset.time_features.shape[1] if hasattr(dataset, 'time_features') else 6
     
     if model_kwargs is None:
-        model_kwargs = dict(input_dim=1, model_dim=128, num_heads=8, num_layers=4, output_dim=1, time_feat_dim=time_feat_dim)
+        model_kwargs = dict(input_dim=1, model_dim=256, num_heads=16, num_layers=6, output_dim=1, time_feat_dim=time_feat_dim)
     else:
         # Update time_feat_dim if not provided or different
         if 'time_feat_dim' not in model_kwargs or model_kwargs['time_feat_dim'] != time_feat_dim:
@@ -82,8 +82,17 @@ def predict(
             context_time_feat = context_time_feat.to(device)
             target_time_feat = target_time_feat.to(device)
             output = model(context, context_time_feat, target_time_feat)
-            all_preds.append(output.cpu().numpy())
-            all_targets.append(target.numpy())
+            
+            # Denormalize predictions and targets if dataset has normalization
+            if hasattr(dataset, 'denormalize'):
+                output_denorm = dataset.denormalize(output.cpu().numpy())
+                target_denorm = dataset.denormalize(target.numpy())
+            else:
+                output_denorm = output.cpu().numpy()
+                target_denorm = target.numpy()
+            
+            all_preds.append(output_denorm)
+            all_targets.append(target_denorm)
             ds_data = getattr(dataset, 'data', None)
             ds_indices = getattr(dataset, 'indices', None)
             if ds_data is not None and hasattr(ds_data, 'columns') and 'series_id' in ds_data.columns and 'timestamp' in ds_data.columns:

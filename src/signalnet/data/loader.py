@@ -4,6 +4,7 @@ Data loader for signal prediction tasks.
 import pandas as pd
 import numpy as np
 import torch
+import os
 from torch.utils.data import Dataset, DataLoader
 from typing import Tuple, Optional, List
 
@@ -17,8 +18,20 @@ class SignalDataset(Dataset):
         self.prediction_length = prediction_length
         self.value_col = value_col
         self.time_col = time_col
+        
+        # Enhanced data preprocessing with normalization
         self.values = self.data[value_col].values.astype(np.float32)
         self.timestamps = pd.to_datetime(self.data[time_col])
+        
+        # Compute normalization statistics
+        self.value_mean = np.mean(self.values)
+        self.value_std = np.std(self.values)
+        if self.value_std == 0:
+            self.value_std = 1.0  # Avoid division by zero
+        
+        # Normalize values for better training
+        self.values_normalized = (self.values - self.value_mean) / self.value_std
+        
         self.time_features, self.features_used = self._extract_time_features(self.timestamps)
         self.indices = self._compute_indices()
 
@@ -144,8 +157,9 @@ class SignalDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         i = self.indices[idx]
-        context = self.values[i:i+self.context_length]
-        prediction = self.values[i+self.context_length:i+self.context_length+self.prediction_length]
+        # Use normalized values for training
+        context = self.values_normalized[i:i+self.context_length]
+        prediction = self.values_normalized[i+self.context_length:i+self.context_length+self.prediction_length]
         context_time_feat = self.time_features[i:i+self.context_length]
         pred_time_feat = self.time_features[i+self.context_length:i+self.context_length+self.prediction_length]
         return (
@@ -154,12 +168,24 @@ class SignalDataset(Dataset):
             torch.tensor(context_time_feat, dtype=torch.float32),
             torch.tensor(pred_time_feat, dtype=torch.float32)
         )
+    
+    def denormalize(self, normalized_values: np.ndarray) -> np.ndarray:
+        """Convert normalized values back to original scale."""
+        return normalized_values * self.value_std + self.value_mean
 
 class SignalDataLoader:
     """
     Loads and preprocesses signal data for training and evaluation.
     """
     def __init__(self, filepath: str, context_length: int, prediction_length: int, value_col: str = "value", time_col: str = "timestamp"):
+        # Input validation
+        if context_length <= 0:
+            raise ValueError("context_length must be positive")
+        if prediction_length <= 0:
+            raise ValueError("prediction_length must be positive")
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Data file not found: {filepath}")
+        
         self.filepath = filepath
         self.context_length = context_length
         self.prediction_length = prediction_length
@@ -168,9 +194,29 @@ class SignalDataLoader:
         self.data = None
 
     def load(self) -> pd.DataFrame:
-        """Load data from file."""
-        self.data = pd.read_csv(self.filepath, parse_dates=[self.time_col])
-        return self.data
+        """Load data from file with validation."""
+        try:
+            self.data = pd.read_csv(self.filepath, parse_dates=[self.time_col])
+            
+            # Validate required columns
+            required_cols = [self.value_col, self.time_col]
+            missing_cols = [col for col in required_cols if col not in self.data.columns]
+            if missing_cols:
+                raise ValueError(f"Missing required columns: {missing_cols}")
+            
+            # Validate data types
+            if not pd.api.types.is_numeric_dtype(self.data[self.value_col]):
+                raise ValueError(f"Column '{self.value_col}' must be numeric")
+            
+            # Check for missing values
+            missing_values = self.data[self.value_col].isnull().sum()
+            if missing_values > 0:
+                print(f"[WARNING] Found {missing_values} missing values in '{self.value_col}' column")
+            
+            return self.data
+            
+        except Exception as e:
+            raise RuntimeError(f"Error loading data from {self.filepath}: {str(e)}")
 
     def get_dataset(self) -> SignalDataset:
         if self.data is None:

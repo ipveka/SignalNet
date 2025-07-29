@@ -41,6 +41,13 @@ def train(
     test_dl = DataLoader(test_ds, batch_size=batch_size)
     print(f"[INFO] Number of training windows: {len(train_ds)}")
     print(f"[INFO] Number of test windows: {len(test_ds)}")
+    
+    # Validate dataset sizes
+    if len(train_ds) == 0:
+        raise ValueError("Training dataset is empty. Please check your data and parameters.")
+    if len(test_ds) == 0:
+        print("[WARNING] Test dataset is empty. This may cause issues with evaluation.")
+        print("[WARNING] Consider reducing context_length or prediction_length, or increasing data size.")
     # Print features used
     features_used = getattr(train_ds, 'features_used', None)
     if features_used is not None:
@@ -58,9 +65,9 @@ def train(
     
     model = SignalTransformer(
         input_dim=1,
-        model_dim=128,  # Increased from 32 to 128
-        num_heads=8,    # Increased from 2 to 8
-        num_layers=4,   # Increased from 2 to 4
+        model_dim=256,  # Increased for better capacity
+        num_heads=16,   # Increased for better attention
+        num_layers=6,   # Increased for deeper representation
         output_dim=1,
         time_feat_dim=time_feat_dim
     )
@@ -68,10 +75,27 @@ def train(
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
     model.to(device)
-    # Step 5: Optimizer and loss function
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)  # Changed to AdamW with weight decay
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
-    criterion = nn.MSELoss()
+    # Step 5: Optimizer and loss function with improved configuration
+    optimizer = optim.AdamW(
+        model.parameters(), 
+        lr=lr, 
+        weight_decay=1e-4,  # Increased weight decay for better regularization
+        betas=(0.9, 0.999),
+        eps=1e-8
+    )
+    
+    # Improved learning rate scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='min', 
+        factor=0.7,  # Less aggressive reduction
+        patience=3,   # More responsive
+        verbose=True,
+        min_lr=1e-7   # Minimum learning rate
+    )
+    
+    # Use Huber loss for better robustness to outliers
+    criterion = nn.HuberLoss(delta=1.0)
     # Step 6: Training loop
     print("[INFO] Starting training loop...")
     best_test_loss = float('inf')
@@ -122,8 +146,12 @@ def train(
                 loss = criterion(output, target)
                 total_test_loss += loss.item() * context.size(0)
             # Compute and print average test loss
-            avg_test_loss = total_test_loss / len(test_dl.dataset)  # type: ignore
-            print(f"[INFO] Test Loss: {avg_test_loss:.4f}")
+            if len(test_dl.dataset) > 0:  # type: ignore
+                avg_test_loss = total_test_loss / len(test_dl.dataset)  # type: ignore
+                print(f"[INFO] Test Loss: {avg_test_loss:.4f}")
+            else:
+                avg_test_loss = float('inf')
+                print(f"[INFO] Test Loss: N/A (no test data)")
             
             # Learning rate scheduling
             scheduler.step(avg_test_loss)
@@ -158,8 +186,12 @@ def train(
             all_predictions.append(output.cpu())
             all_targets.append(target.cpu())
         # Compute and print average test loss
-        avg_loss = total_loss / len(test_dl.dataset)  # type: ignore
-        print(f"[INFO] Final Test Loss: {avg_loss:.4f}")
+        if len(test_dl.dataset) > 0:  # type: ignore
+            avg_loss = total_loss / len(test_dl.dataset)  # type: ignore
+            print(f"[INFO] Final Test Loss: {avg_loss:.4f}")
+        else:
+            avg_loss = float('inf')
+            print(f"[INFO] Final Test Loss: N/A (no test data)")
         
         # Analyze predictions
         all_preds = torch.cat(all_predictions, dim=0)

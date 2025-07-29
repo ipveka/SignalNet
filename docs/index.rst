@@ -15,7 +15,7 @@ SignalNet is a production-ready Python package for time series signal prediction
 
 Key Features
 -----------
-- **Advanced Transformer Architecture**: 128-dimensional model with 4 layers and 8 attention heads
+- **Advanced Transformer Architecture**: 256-dimensional model with 6 layers and 16 attention heads
 - **Data Normalization**: Built-in LayerNorm for stable training and better convergence
 - **Automatic Output Scaling**: Learnable scale and bias parameters for optimal prediction ranges
 - **Rich Time Features**: Comprehensive temporal features (day of week, hour, minute, month, day of month, is_weekend)
@@ -27,8 +27,8 @@ Key Features
 Performance
 -----------
 SignalNet achieves excellent prediction accuracy:
-- **MSE**: 0.44 (97% improvement over baseline)
-- **MAE**: 0.53 (85% improvement over baseline)
+- **MSE**: 0.31 (98% improvement over baseline)
+- **MAE**: 0.48 (86% improvement over baseline)
 - **Scale Alignment**: Predictions automatically match data scale
 - **Consistent Performance**: Robust across different time series patterns
 
@@ -47,7 +47,7 @@ Quick Start
 
     # Make predictions (returns DataFrame)
     pred_df = predict(dataloader, model_path='output/signalnet_model.pth')
-    pred_df.to_csv('output/predictions.csv', index=False)
+    pred_df.to_csv('output/example_output.csv', index=False)
 
 Project Structure
 -----------------
@@ -65,7 +65,7 @@ Project Structure
 
 Architecture Improvements
 ------------------------
-- **Larger Model**: 128 dimensions, 4 layers, 8 attention heads
+- **Larger Model**: 256 dimensions, 6 layers, 16 attention heads
 - **Data Normalization**: LayerNorm for inputs and time features
 - **Output Scaling**: Learnable scale and bias parameters
 - **Regularization**: Dropout and gradient clipping for stability

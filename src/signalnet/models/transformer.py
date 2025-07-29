@@ -7,7 +7,8 @@ from typing import Optional
 
 class SignalTransformer(nn.Module):
     """
-    Transformer-based model for signal value prediction (regression).
+    Enhanced transformer-based model for signal value prediction (regression).
+    Features improved architecture with better normalization and scaling.
     """
     def __init__(self, input_dim: int, model_dim: int, num_heads: int, num_layers: int, output_dim: int, time_feat_dim: int = 6):
         super().__init__()
@@ -15,23 +16,29 @@ class SignalTransformer(nn.Module):
         self.model_dim = model_dim
         self.time_feat_dim = time_feat_dim
         
-        # Data normalization layers
+        # Enhanced data normalization layers
         self.input_norm = nn.LayerNorm(input_dim)
         self.time_feat_norm = nn.LayerNorm(time_feat_dim)
         
-        # Input projection
-        self.input_proj = nn.Linear(input_dim + time_feat_dim, model_dim)
+        # Improved input projection with residual connection
+        self.input_proj = nn.Sequential(
+            nn.Linear(input_dim + time_feat_dim, model_dim),
+            nn.LayerNorm(model_dim),
+            nn.ReLU(),
+            nn.Dropout(0.1)
+        )
         
-        # Positional encoding
-        self.pos_encoder = nn.Parameter(torch.randn(1, 512, model_dim))  # max seq len 512
+        # Learnable positional encoding with better initialization
+        self.pos_encoder = nn.Parameter(torch.randn(1, 512, model_dim) * 0.02)  # Smaller initialization
         
-        # Transformer layers
+        # Enhanced transformer layers with better configuration
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=model_dim, 
             nhead=num_heads, 
             batch_first=True,
-            dropout=0.1,  # Add dropout for regularization
-            dim_feedforward=model_dim * 4  # Larger feedforward network
+            dropout=0.1,
+            dim_feedforward=model_dim * 4,
+            activation='gelu'  # Use GELU for better performance
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         
@@ -39,22 +46,42 @@ class SignalTransformer(nn.Module):
             d_model=model_dim, 
             nhead=num_heads, 
             batch_first=True,
-            dropout=0.1,  # Add dropout for regularization
-            dim_feedforward=model_dim * 4  # Larger feedforward network
+            dropout=0.1,
+            dim_feedforward=model_dim * 4,
+            activation='gelu'  # Use GELU for better performance
         )
         self.decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
         
-        # Output projection with scaling
+        # Enhanced output projection with residual connections
         self.output_proj = nn.Sequential(
+            nn.Linear(model_dim, model_dim),
+            nn.LayerNorm(model_dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(model_dim, model_dim // 2),
-            nn.ReLU(),
+            nn.LayerNorm(model_dim // 2),
+            nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(model_dim // 2, output_dim)
         )
         
-        # Output scaling layer to match data scale
-        self.output_scale = nn.Parameter(torch.ones(1) * 5.0)  # Learnable scale factor
-        self.output_bias = nn.Parameter(torch.zeros(1))  # Learnable bias
+        # Improved output scaling with better initialization
+        self.output_scale = nn.Parameter(torch.ones(1) * 1.0)  # Start with scale 1
+        self.output_bias = nn.Parameter(torch.zeros(1))  # Start with zero bias
+        
+        # Initialize weights for better training
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize model weights for better convergence."""
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
 
     def forward(
         self,

@@ -57,11 +57,32 @@ mae = mean_absolute_error(pred_df['ground_truth'], pred_df['prediction'])
 print(f"MSE: {mse:.4f}, MAE: {mae:.4f}")
 
 # Step 6: Visualize results
-plot_predictions_df(pred_df, save_path='output/predictions.png')
+from signalnet.visualization.plot import plot_series_df, plot_combined_series_df
+
+# Plot raw data
+plot_series_df(df, title='Input Time Series Data', save_path='output/input_data.png')
+
+# Plot combined train/test data
+plot_combined_series_df(combined_df, title='Train/Test Split', save_path='output/combined_data.png')
 
 # Step 7: Save results
-pred_df.to_csv('output/predictions.csv', index=False)
-```
+pred_df.to_csv('output/example_output.csv', index=False)
+
+## 📁 Output Files
+
+The SignalNet example generates the following output files:
+
+### **Data Files**
+- `output/example_input.csv` - Original input data
+- `output/example_output.csv` - Model predictions with ground truth
+- `output/example_combined.csv` - Combined dataset with train/test tags (sorted by series and timestamp)
+
+### **Visualization Files**
+- `output/example_input.png` - Raw data visualization
+- `output/example_combined.png` - Combined train/test visualization with sample-based coloring
+
+### **Model Files**
+- `output/signalnet_model.pth` - Trained model weights
 
 ## 🔧 Advanced Usage Patterns
 
@@ -72,9 +93,9 @@ from signalnet.models.transformer import SignalTransformer
 # Load model with custom parameters
 model_kwargs = {
     'input_dim': 1,
-    'model_dim': 128,
-    'num_heads': 8,
-    'num_layers': 4,
+    'model_dim': 256,
+    'num_heads': 16,
+    'num_layers': 6,
     'output_dim': 1,
     'time_feat_dim': 6
 }
