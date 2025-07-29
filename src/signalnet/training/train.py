@@ -16,9 +16,9 @@ def train(
     data_path: Optional[str] = None,
     context_length: int = 24,
     prediction_length: int = 6,
-    epochs: int = 50,  # Increased from 5 to 50
-    batch_size: int = 32,  # Increased from 16 to 32
-    lr: float = 1e-4,  # Reduced from 1e-3 to 1e-4 for better stability
+    epochs: int = 50, 
+    batch_size: int = 32, 
+    lr: float = 1e-4,
     save_model: bool = True
 ):
     print("========== SignalNet Training ==========")

@@ -11,7 +11,7 @@ from signalnet.data.loader import SignalDataLoader
 from signalnet.evaluation.metrics import mean_squared_error, mean_absolute_error
 from signalnet.data.generate_data import generate_signal_data
 from signalnet.predict import predict
-from signalnet.visualization.plot import plot_series_df, plot_combined_data
+from signalnet.visualization.plot import plot_series_df
 from signalnet.training.train import train
 import os
 
@@ -72,7 +72,7 @@ df = pd.read_csv(CONFIG['data_path'])
 
 # Print data overview
 print("[DATA] DataFrame head:")
-print(df.head())
+print(df.head(15))
 print(f"[DATA] DataFrame shape: {df.shape}")
 print(f"[DATA] Unique series_id: {df['series_id'].unique()}")
 print(f"[DATA] Time range: {df['timestamp'].min()} to {df['timestamp'].max()}")
@@ -183,15 +183,13 @@ print("[PREDICT] Using predict() utility to make predictions on test set...")
 
 test_pred_df = predict(test_dataloader, model_path=CONFIG['model_path'], return_all_info=False)
 
+# Add sample
+test_pred_df['sample'] = 'test'
+
 # Show test set predictions
 print("\n[PREDICT] Test set predictions head:")
-print(test_pred_df.head(10))
+print(test_pred_df.head(15))
 print(f"\n[PREDICT] Test set predictions shape: {test_pred_df.shape}")
-
-# Add sample tag to test predictions
-test_pred_df['sample'] = 'test'
-print(f"\n[PREDICT] Test predictions with sample tag:")
-print(test_pred_df[['series_id', 'timestamp', 'ground_truth', 'prediction', 'sample']].head(5))
 
 # ============================================================================
 # STEP 9: EVALUATION METRICS
@@ -220,16 +218,7 @@ print(f"[SAVE] Series distribution: {combined_data['series_id'].value_counts().t
 
 # Print head of combined data
 print(f"\n[SAVE] Combined data head:")
-print(combined_data.head(10))
-
-# Plot the combined data showing train vs test samples
-print(f"\n[SAVE] Plotting combined data with train/test samples...")
-plot_combined_data(
-    combined_data, 
-    title=f'Combined Train/Test Data - {CONFIG["frequency"]} Frequency',
-    save_path=f'{CONFIG["output_dir"]}/example_combined.png'
-)
-print(f"[SAVE] Combined data visualization saved to {CONFIG['output_dir']}/example_combined.png")
+print(combined_data.head(15))
 
 # ============================================================================
 # STEP 11: SAVING ALL DATASETS
