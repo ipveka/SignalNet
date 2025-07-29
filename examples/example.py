@@ -282,9 +282,9 @@ print("\n[PLOT] Creating visualization of combined dataset...")
 plot_combined_series_df(
     combined_data, 
     title=f'Combined Dataset: Train/Test Split ({CONFIG["frequency"]} Data)', 
-    save_path=f'{CONFIG["output_dir"]}/example_combined.png'
+    save_path=f'{CONFIG["output_dir"]}/example_output.png'
 )
-print(f"[PLOT] Combined dataset visualization saved to {CONFIG['output_dir']}/example_combined.png")
+print(f"[PLOT] Combined dataset visualization saved to {CONFIG['output_dir']}/example_output.png")
 
 # ============================================================================
 # STEP 12: SAVING ALL DATASETS
@@ -297,15 +297,10 @@ print("[SAVE] Saving input data...")
 df.to_csv(f'{CONFIG["output_dir"]}/example_input.csv', index=False)
 print("[SAVE] Saved input data to output/example_input.csv")
 
-# Save the model predictions with ground truth values
-print("[SAVE] Saving forecast data...")
-test_pred_df.to_csv(f'{CONFIG["output_dir"]}/example_output.csv', index=False)
-print("[SAVE] Saved forecast data to output/example_output.csv")
-
 # Save the combined dataset with train/test tags
 print("[SAVE] Saving combined data...")
-combined_data.to_csv(f'{CONFIG["output_dir"]}/example_combined.csv', index=False)
-print("[SAVE] Saved combined data to output/example_combined.csv")
+combined_data.to_csv(f'{CONFIG["output_dir"]}/example_output.csv', index=False)
+print("[SAVE] Saved combined data to output/example_output.csv")
 
 # ============================================================================
 # COMPLETION
