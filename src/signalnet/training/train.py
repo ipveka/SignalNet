@@ -16,9 +16,9 @@ def train(
     data_path: Optional[str] = None,
     context_length: int = 24,
     prediction_length: int = 6,
-    epochs: int = 5,
-    batch_size: int = 16,
-    lr: float = 1e-3,
+    epochs: int = 50, 
+    batch_size: int = 32, 
+    lr: float = 1e-4,
     save_model: bool = True
 ):
     print("========== SignalNet Training ==========")
@@ -41,6 +41,13 @@ def train(
     test_dl = DataLoader(test_ds, batch_size=batch_size)
     print(f"[INFO] Number of training windows: {len(train_ds)}")
     print(f"[INFO] Number of test windows: {len(test_ds)}")
+    
+    # Validate dataset sizes
+    if len(train_ds) == 0:
+        raise ValueError("Training dataset is empty. Please check your data and parameters.")
+    if len(test_ds) == 0:
+        print("[WARNING] Test dataset is empty. This may cause issues with evaluation.")
+        print("[WARNING] Consider reducing context_length or prediction_length, or increasing data size.")
     # Print features used
     features_used = getattr(train_ds, 'features_used', None)
     if features_used is not None:
@@ -48,25 +55,50 @@ def train(
     else:
         print("[TRAIN] Features used in the model: ['day_of_week (normalized)', 'hour_of_day (normalized)', 'minute_of_hour (normalized)', 'month (normalized)', 'day_of_month (normalized)', 'is_weekend']")
     # Step 3: Model setup
-    # Initialize the transformer model for signal prediction
-    print("[INFO] Initializing SignalTransformer model...")
+    # Initialize the transformer model for signal prediction with better architecture
+    print("[INFO] Initializing improved SignalTransformer model...")
+    
+    # Get feature dimensions from the dataset
+    train_dataset = train_ds
+    time_feat_dim = train_dataset.time_features.shape[1] if hasattr(train_dataset, 'time_features') else 6
+    print(f"[INFO] Detected time feature dimensions: {time_feat_dim}")
+    
     model = SignalTransformer(
         input_dim=1,
-        model_dim=32,
-        num_heads=2,
-        num_layers=2,
+        model_dim=256,  # Increased for better capacity
+        num_heads=16,   # Increased for better attention
+        num_layers=6,   # Increased for deeper representation
         output_dim=1,
-        time_feat_dim=6
+        time_feat_dim=time_feat_dim
     )
     # Step 4: Device selection (GPU if available, else CPU)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using device: {device}")
     model.to(device)
-    # Step 5: Optimizer and loss function
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
+    # Step 5: Optimizer and loss function with improved configuration
+    optimizer = optim.AdamW(
+        model.parameters(), 
+        lr=lr, 
+        weight_decay=1e-4,  # Increased weight decay for better regularization
+        betas=(0.9, 0.999),
+        eps=1e-8
+    )
+    
+    # Improved learning rate scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='min', 
+        factor=0.7,  # Less aggressive reduction
+        patience=3,   # More responsive
+        verbose=True,
+        min_lr=1e-7   # Minimum learning rate
+    )
+    
+    # Use Huber loss for better robustness to outliers
+    criterion = nn.HuberLoss(delta=1.0)
     # Step 6: Training loop
     print("[INFO] Starting training loop...")
+    best_test_loss = float('inf')
     for epoch in range(epochs):
         print(f"\n--- Epoch {epoch+1}/{epochs} ---")
         model.train()
@@ -86,20 +118,59 @@ def train(
             loss = criterion(output, target)
             # Backpropagation
             loss.backward()
+            # Gradient clipping to prevent exploding gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             # Update model parameters
             optimizer.step()
             total_loss += loss.item() * context.size(0)
-            # Print batch loss every 10 batches or at the end
-            if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(train_dl):
+            # Print batch loss every 20 batches or at the end
+            if (batch_idx + 1) % 20 == 0 or (batch_idx + 1) == len(train_dl):
                 print(f"  [Batch {batch_idx+1}/{len(train_dl)}] Batch Loss: {loss.item():.4f}")
         # Compute and print average loss for the epoch
-        avg_loss = total_loss / len(train_dl.dataset)  # type: ignore
-        print(f"[INFO] Epoch {epoch+1} completed. Average Train Loss: {avg_loss:.4f}")
-    # Step 7: Evaluation on test set
-    print("\n[INFO] Training complete. Starting evaluation on test set...")
+        avg_train_loss = total_loss / len(train_dl.dataset)  # type: ignore
+        print(f"[INFO] Epoch {epoch+1} completed. Average Train Loss: {avg_train_loss:.4f}")
+        
+        # Step 7: Evaluation on test set every epoch
+        model.eval()
+        with torch.no_grad():
+            total_test_loss = 0
+            for batch_idx, (context, target, context_time_feat, target_time_feat) in enumerate(test_dl):
+                # Move data to device
+                context = context.to(device)
+                target = target.to(device)
+                context_time_feat = context_time_feat.to(device)
+                target_time_feat = target_time_feat.to(device)
+                # Forward pass (no teacher forcing)
+                output = model(context, context_time_feat, target_time_feat)
+                # Compute loss
+                loss = criterion(output, target)
+                total_test_loss += loss.item() * context.size(0)
+            # Compute and print average test loss
+            if len(test_dl.dataset) > 0:  # type: ignore
+                avg_test_loss = total_test_loss / len(test_dl.dataset)  # type: ignore
+                print(f"[INFO] Test Loss: {avg_test_loss:.4f}")
+            else:
+                avg_test_loss = float('inf')
+                print(f"[INFO] Test Loss: N/A (no test data)")
+            
+            # Learning rate scheduling
+            scheduler.step(avg_test_loss)
+            
+            # Save best model
+            if avg_test_loss < best_test_loss:
+                best_test_loss = avg_test_loss
+                if save_model:
+                    print(f"[INFO] New best test loss! Saving model...")
+                    os.makedirs('output', exist_ok=True)
+                    torch.save(model.state_dict(), 'output/signalnet_model.pth')
+    
+    # Step 8: Final evaluation
+    print("\n[INFO] Training complete. Final evaluation on test set...")
     model.eval()
     with torch.no_grad():
         total_loss = 0
+        all_predictions = []
+        all_targets = []
         for batch_idx, (context, target, context_time_feat, target_time_feat) in enumerate(test_dl):
             # Move data to device
             context = context.to(device)
@@ -111,18 +182,25 @@ def train(
             # Compute loss
             loss = criterion(output, target)
             total_loss += loss.item() * context.size(0)
-            # Print batch loss every 10 batches or at the end
-            if (batch_idx + 1) % 10 == 0 or (batch_idx + 1) == len(test_dl):
-                print(f"  [Test Batch {batch_idx+1}/{len(test_dl)}] Batch Loss: {loss.item():.4f}")
+            # Store predictions for analysis
+            all_predictions.append(output.cpu())
+            all_targets.append(target.cpu())
         # Compute and print average test loss
-        avg_loss = total_loss / len(test_dl.dataset)  # type: ignore
-        print(f"[INFO] Test Loss: {avg_loss:.4f}")
-    # Step 8: Save the trained model weights (if enabled)
-    if save_model:
-        print("[INFO] Saving trained model weights to output/signalnet_model.pth...")
-        os.makedirs('output', exist_ok=True)
-        torch.save(model.state_dict(), 'output/signalnet_model.pth')
-        print("[INFO] Model saved.")
+        if len(test_dl.dataset) > 0:  # type: ignore
+            avg_loss = total_loss / len(test_dl.dataset)  # type: ignore
+            print(f"[INFO] Final Test Loss: {avg_loss:.4f}")
+        else:
+            avg_loss = float('inf')
+            print(f"[INFO] Final Test Loss: N/A (no test data)")
+        
+        # Analyze predictions
+        all_preds = torch.cat(all_predictions, dim=0)
+        all_targs = torch.cat(all_targets, dim=0)
+        print(f"[INFO] Prediction range: [{all_preds.min():.3f}, {all_preds.max():.3f}]")
+        print(f"[INFO] Target range: [{all_targs.min():.3f}, {all_targs.max():.3f}]")
+        print(f"[INFO] Model output scale: {model.output_scale.item():.3f}")
+        print(f"[INFO] Model output bias: {model.output_bias.item():.3f}")
+    
     print("========== Training & Evaluation Finished ==========")
 
 if __name__ == "__main__":
@@ -131,9 +209,9 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', type=str, default=None, help='Path to input CSV data')
     parser.add_argument('--context_length', type=int, default=24)
     parser.add_argument('--prediction_length', type=int, default=6)
-    parser.add_argument('--epochs', type=int, default=5)
-    parser.add_argument('--batch_size', type=int, default=16)
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--epochs', type=int, default=50)
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--no_save_model', action='store_true', help='Do not save the trained model after training')
     args = parser.parse_args()
     train(

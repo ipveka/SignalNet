@@ -9,7 +9,7 @@ def test_signal_dataset_windowing():
     # Create dummy data
     n = 30
     df = pd.DataFrame({
-        'timestamp': pd.date_range('2023-01-01', periods=n, freq='H'),
+        'timestamp': pd.date_range('2023-01-01', periods=n, freq='h'),
         'value': np.arange(n, dtype=np.float32)
     })
     context_length = 5
@@ -21,13 +21,15 @@ def test_signal_dataset_windowing():
     context, prediction, context_time_feat, pred_time_feat = dataset[0]
     assert context.shape == (context_length,)
     assert prediction.shape == (prediction_length,)
-    assert context_time_feat.shape == (context_length, 6)
-    assert pred_time_feat.shape == (prediction_length, 6)
+    # Check actual feature dimensions instead of hardcoded 6
+    expected_features = len(dataset.features_used)
+    assert context_time_feat.shape == (context_length, expected_features)
+    assert pred_time_feat.shape == (prediction_length, expected_features)
 
 def test_signal_dataloader_split():
     n = 50
     df = pd.DataFrame({
-        'timestamp': pd.date_range('2023-01-01', periods=n, freq='H'),
+        'timestamp': pd.date_range('2023-01-01', periods=n, freq='h'),
         'value': np.random.randn(n)
     })
     context_length = 6
